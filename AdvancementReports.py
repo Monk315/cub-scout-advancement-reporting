@@ -60,7 +60,7 @@ def makeDenPDF(fname):
 
 def makeTitlePage(doc, elements, styles, subtitle, landscape=False):
     # --- Title Page ---
-    logo_path = "logos" + os.sep + "logo.png"  # replace with your pack's logo. You may also need to change the draw heigh/width to get the right ratio
+    logo_path = PACK_LOGO  # replace with your pack's logo. You may also need to change the draw heigh/width to get the right ratio
     logo = Image(logo_path)
     logo.drawHeight = 3 * inch
     logo.drawWidth = 3 * inch
@@ -162,43 +162,25 @@ def analyzeRequirements(scout_reqs):
     for idx, row in df.iloc[3:].iterrows():
         first_col = str(row[0]).strip()  # first column of the row
         
-        if "a. lion elective" in first_col.lower():
-            current_adventure = "Lion Elective Adventure 2"
-            current_rank = "Lion"
-        elif "b. lion elective" in first_col.lower():
-            current_adventure = "Lion Elective Adventure"
-            current_rank = "Lion"
-        elif "a. tiger elective" in first_col.lower():
-            current_adventure = "Tiger Elective Adventure 2"
-            current_rank = "Tiger"
-        elif "b. tiger elective" in first_col.lower():
-            current_adventure = "Tiger Elective Adventure"
-            current_rank = "Tiger"
-        elif "a. wolf elective" in first_col.lower():
-            current_adventure = "Wolf Elective Adventure 2"
-            current_rank = "Wolf"
-        elif "b. wolf elective" in first_col.lower():
-            current_adventure = "Wolf Elective Adventure"
-            current_rank = "Wolf"
-        elif "a. bear elective" in first_col.lower():
-            current_adventure = "Bear Elective Adventure 2"
-            current_rank = "Bear"
-        elif "b. bear elective" in first_col.lower():
-            current_adventure = "Bear Elective Adventure"
-            current_rank = "Bear"
-        elif "a. webelos elective" in first_col.lower():
-            current_adventure = "Webelos Elective Adventure 2"
-            current_rank = "Webelos"
-        elif "b. webelos elective" in first_col.lower():
-            current_adventure = "Webelos Elective Adventure"
-            current_rank = "Webelos"
-        elif "a. arrow of light elective" in first_col.lower():
-            current_adventure = "Arrow of Light Elective Adventure 2"
-            current_rank = "Arrow of Light"
-        elif "b. arrow of light elective" in first_col.lower():
-            current_adventure = "Arrow of Light Elective Adventure"
-            current_rank = "Arrow of Light"
-        else:
+        lower_col = first_col.lower()
+        if "elective" not in lower_col:
+            continue
+            
+        current_rank = None
+        current_adventure = None
+        
+        for r in ranks:
+            rank_lower = r.lower()
+            if f"a. {rank_lower} elective" in lower_col:
+                current_adventure = f"{r} Elective Adventure 2"
+                current_rank = r
+                break
+            elif f"b. {rank_lower} elective" in lower_col:
+                current_adventure = f"{r} Elective Adventure"
+                current_rank = r
+                break
+        
+        if not current_rank:
             continue
 
        
@@ -214,9 +196,11 @@ def analyzeRequirements(scout_reqs):
               
     return scout_reqs
 
-def findCompletion(scout_reqs):
-    for scout in scout_names[1:]:
-        #scout_data = scout_reqs.get(scout, {})
+def findCompletion(scout_reqs, scouts_list):
+    completion = []
+    for scout in scouts_list:
+        if scout not in scout_reqs:
+            continue
         scout_data = scout_reqs[scout]
         # Count total requirements and completed
         total_reqs = 0
@@ -230,30 +214,23 @@ def findCompletion(scout_reqs):
         
         pct_complete = (total_completed / total_reqs * 100) if total_reqs > 0 else 0
             
-        scout_completion.append((scout, pct_complete))
+        completion.append((scout, pct_complete))
         
-    scout_completion.sort(key=lambda x: x[1], reverse=True)
+    completion.sort(key=lambda x: x[1], reverse=True)
     
-    return scout_completion
+    return completion
     
     
 
-def makeDenOverview(denElements, styles, packElements, rank):
+def create_header_table(center_elements, rank, col_widths=[1.25*inch, 4.5*inch, 1.2*inch]):
     #Logos to use
-    main_logo = Image("logos" + os.sep + "Logo.png", width=1.0*inch, height=1.0*inch)
+    main_logo = Image(PACK_LOGO, width=1.0*inch, height=1.0*inch)
     den_logo = Image("logos" + os.sep + rank + ".png", width=1.0*inch, height=1.0*inch)
 
-    #title and subtitles
-    titlepara = Paragraph(rank + " Den Snapshot", styles["Title"])
-    subtitlepara = Paragraph("Progress Towards Rank", styles["Title"])
-  
-    centerblock = [titlepara, subtitlepara]
-    #put the header in a table
     title_table = Table(
-        [[main_logo, centerblock, den_logo]],
-        colWidths=[1.25*inch, 4.5*inch, 1.2*inch]
+        [[main_logo, center_elements, den_logo]],
+        colWidths=col_widths
     )
-    
     
     title_table.setStyle(TableStyle([
         ("ALIGN", (0,0), (0,0), "LEFT"),
@@ -265,6 +242,16 @@ def makeDenOverview(denElements, styles, packElements, rank):
         ("TOPPADDING", (0,0), (-1,-1), 6),
         ("BOTTOMPADDING", (0,0), (-1,-1), 6),
     ]))
+    return title_table
+
+def makeDenOverview(denElements, styles, packElements, rank):
+    #title and subtitles
+    titlepara = Paragraph(rank + " Den Snapshot", styles["Title"])
+    subtitlepara = Paragraph("Progress Towards Rank", styles["Title"])
+  
+    centerblock = [titlepara, subtitlepara]
+    #put the header in a table
+    title_table = create_header_table(centerblock, rank, [1.25*inch, 4.5*inch, 1.2*inch])
 
     #put the header on the page for the den report
     denElements.append(title_table)
@@ -340,29 +327,11 @@ def makeDenOverview(denElements, styles, packElements, rank):
 
 def buildRequirementSnapshot(denElements, styles, rank):
     #add the page title
-        #Logos to use
-    main_logo = Image("logos" + os.sep + "Logo.png", width=1.0*inch, height=1.0*inch)
-    den_logo = Image("logos" + os.sep + rank + ".png", width=1.0*inch, height=1.0*inch)
-
     #title and subtitles
     titlepara = Paragraph(rank + " Den Outstanding Requirements", styles["Title"])
     
     #put the header in a table
-    title_table = Table(
-        [[main_logo, titlepara, den_logo]],
-        colWidths=[1.25*inch, 4*inch, 1.2*inch, 3*inch]
-    )
-    
-    title_table.setStyle(TableStyle([
-        ("ALIGN", (0,0), (0,0), "LEFT"),
-        ("ALIGN", (1,0), (1,0), "CENTER"),
-        ("ALIGN", (2,0), (2,0), "RIGHT"),
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING", (0,0), (-1,-1), 0),
-        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-        ("TOPPADDING", (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-    ]))
+    title_table = create_header_table(titlepara, rank, [1.25*inch, 4*inch, 1.2*inch])
 
     #put the header on the page for the den report
     denElements.append(title_table)
@@ -445,30 +414,11 @@ def addScoutReportPage(scout, denElements, styles, rank, output_dir):
     scoutElements.append(Paragraph(title_text, styles["Title"]))
     scoutElements.append(Spacer(1, 0.3*inch))
     '''
-    #Logos to use
-    main_logo = Image("logos" + os.sep + "Logo.png", width=1.0*inch, height=1.0*inch)
-    den_logo = Image("logos" + os.sep + rank + ".png", width=1.0*inch, height=1.0*inch)
-
     #title and subtitles
     titlepara = Paragraph(f"{scout} Rank Advancement Report", styles["Title"])
       
     #put the header in a table
-    title_table = Table(
-        [[main_logo, titlepara, den_logo]],
-        colWidths=[1.25*inch, 4.5*inch, 1.2*inch]
-    )
-    
-    
-    title_table.setStyle(TableStyle([
-        ("ALIGN", (0,0), (0,0), "LEFT"),
-        ("ALIGN", (1,0), (1,0), "CENTER"),
-        ("ALIGN", (2,0), (2,0), "RIGHT"),
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING", (0,0), (-1,-1), 0),
-        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-        ("TOPPADDING", (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-    ]))
+    title_table = create_header_table(titlepara, rank, [1.25*inch, 4.5*inch, 1.2*inch])
 
     #put the header on the page for the den report
     denElements.append(title_table)
@@ -548,18 +498,21 @@ try:
     PACK_NUM = config.get("PACK_NUM", "1234")
     CSV_FILE = config.get("CSV_FILE", "")
     OUTPUT_FOLDER = config.get("OUTPUT_FOLDER", "Output")
+    PACK_LOGO = config.get("PACK_LOGO", "logos" + os.sep + "logo.png")
 except FileNotFoundError:
     print("Warning: config.json not found. Creating a default config.json file. Please update it with your settings.")
     default_config = {
         "PACK_NUM": "1234",
         "CSV_FILE": "C:\\path\\to\\your\\report.csv",
-        "OUTPUT_FOLDER": "Output"
+        "OUTPUT_FOLDER": "Output",
+        "PACK_LOGO": "logos" + os.sep + "logo.png"
     }
     with open('config.json', 'w') as f:
         json.dump(default_config, f, indent=4)
     PACK_NUM = default_config["PACK_NUM"]
     CSV_FILE = default_config["CSV_FILE"]
     OUTPUT_FOLDER = default_config["OUTPUT_FOLDER"]
+    PACK_LOGO = default_config["PACK_LOGO"]
 
 ####main####
 debugging = True
@@ -630,8 +583,7 @@ analyzeRequirements(scout_reqs)
 
 
 
-scout_completion = [] #stores the percentage of rank scout has achieved
-scout_completion = findCompletion(scout_reqs)
+scout_completion = findCompletion(scout_reqs, scout_names[1:])
 
 
 
