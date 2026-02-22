@@ -12,14 +12,16 @@ This script should be run in a folder and creates several different documents wh
 3. Individual report cards - each rank will have a folder created for it, and in there will be written a "report card" file for each scout, outlining the requirements they still need to complete to make rank. Useful for emailing to parents as we get closer to the end of the scouting year!
 
 **In order to personalize the reports**
-1. Replace "logo.png" in the logos folder with your pack logo, if you have one
-2. Look for all instances of "logo.png" in the advancement reports script (there's about 3 places): you may have to adjust the radio on height/width if your pack logo is not perfectly square
-3. Replace the PACK_NUM variable with your pack's number
+1. Copy `config.example.json` to a new file named `config.json`
+2. Update the `PACK_NUM` with your pack's number
+3. Update `PACK_LOGO` to point to your pack's logo file (e.g., `logos/logo.png`), if you have one
+4. Update `CSV_FILE` to point to the CSV export you generated from Internet Advancement
+5. Optionally update `OUTPUT_FOLDER` if you'd like your PDF reports generated outside of the default `Output` directory
 
 **In order to run the script,**
 1. You will need to generate a report from Internet Advancement (see below)
-2. Put the csv report into the same directory as the script. Make sure it's titled "reportbuilder.csv"
-3. run the script from the command line. (_python AdvancementReports.py_)
+2. Ensure you have personalized your `config.json` file as instructed above
+3. Run the script from the command line. (`python AdvancementReports.py`)
 
 **In order to generate the report from Internet Advancement**
 In Internet Advancement:
