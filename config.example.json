@@ -1,0 +1,5 @@
+{
+    "PACK_NUM": "1234",
+    "CSV_FILE": "C:\\fake\\path\\to\\reportbuilder.csv",
+    "OUTPUT_FOLDER": "C:\\fake\\path\\to\\output"
+}

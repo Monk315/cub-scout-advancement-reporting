@@ -432,9 +432,9 @@ def buildRequirementSnapshot(denElements, styles, rank):
     # --- Page break ---
     denElements.append(PageBreak())
 
-def addScoutReportPage(scout, denElements, styles, rank):
+def addScoutReportPage(scout, denElements, styles, rank, output_dir):
     #create a PDF for this scout's individual report card
-    scoutdoc = SimpleDocTemplate(os.path.join(rank, scout+".pdf"), pagesize=letter)
+    scoutdoc = SimpleDocTemplate(os.path.join(output_dir, scout+".pdf"), pagesize=letter)
     scoutElements = []
     
     '''title_text = f"{scout} Rank Advancement Report"
@@ -539,18 +539,48 @@ def addScoutReportPage(scout, denElements, styles, rank):
     scoutdoc.build(scoutElements)
         
 
+import chardet
+
+# Load configuration
+try:
+    with open('config.json', 'r') as f:
+        config = json.load(f)
+    PACK_NUM = config.get("PACK_NUM", "1234")
+    CSV_FILE = config.get("CSV_FILE", "")
+    OUTPUT_FOLDER = config.get("OUTPUT_FOLDER", "Output")
+except FileNotFoundError:
+    print("Warning: config.json not found. Creating a default config.json file. Please update it with your settings.")
+    default_config = {
+        "PACK_NUM": "1234",
+        "CSV_FILE": "C:\\path\\to\\your\\report.csv",
+        "OUTPUT_FOLDER": "Output"
+    }
+    with open('config.json', 'w') as f:
+        json.dump(default_config, f, indent=4)
+    PACK_NUM = default_config["PACK_NUM"]
+    CSV_FILE = default_config["CSV_FILE"]
+    OUTPUT_FOLDER = default_config["OUTPUT_FOLDER"]
+
 ####main####
 debugging = True
 ranks = ["Lion", "Tiger", "Wolf", "Bear", "Webelos", "Arrow of Light"]
-PACK_NUM = "1234"
-PACK_OUTPUT_PDF = "Pack " + PACK_NUM + " Advancement Report.pdf"
+
+# Ensure output directory exists
+if not os.path.exists(OUTPUT_FOLDER):
+    os.makedirs(OUTPUT_FOLDER)
+
+PACK_OUTPUT_PDF = os.path.join(OUTPUT_FOLDER, "Pack " + PACK_NUM + " Advancement Report.pdf")
 DEN_OUTPUT_PDF = " Den Advancement Report.pdf"
-CSV_FILE = "reportbuilder.csv"
 JSON_FILE = "requirements.json"
 
 
 #Sanitize the input file because internet advancement adds weird stuff
-sanitizeinput(CSV_FILE)
+try:
+    sanitizeinput(CSV_FILE)
+except FileNotFoundError:
+    print(f"Error: CSV file not found at {CSV_FILE}")
+    print("Please check your config.json file and ensure the CSV_FILE path is correct.")
+    exit(1)
 
 #create the pack overview PDF
 (packDoc, packElements, styles) = makePackPDF(PACK_OUTPUT_PDF)
@@ -559,7 +589,11 @@ makeTitlePage(packDoc, packElements, styles, "Pack Overview")
 
 
 #build a roster of all the scouts sorted by rank
-df = pd.read_csv(CSV_FILE, header=None) #read in the CSV file
+try:
+    df = pd.read_csv(CSV_FILE, header=None) #read in the CSV file
+except FileNotFoundError:
+    print(f"Error: Could not read CSV file at {CSV_FILE}")
+    exit(1)
 scout_names = df.iloc[0].tolist()
 scout_ranks = df.iloc[2].tolist()
 scout_ranks_completed = df.iloc[1].tolist()
@@ -576,9 +610,15 @@ for idx, (name, r) in enumerate(zip(scout_names, scout_ranks)):
 
 
 
+import chardet
+
 #build a structure of all the rank requirements
-with open(JSON_FILE) as f:
-    adventures = json.load(f)
+with open(JSON_FILE, 'rb') as f:
+    raw_data = f.read()
+    detected_encoding = chardet.detect(raw_data)['encoding']
+
+json_string = raw_data.decode(detected_encoding)
+adventures = json.loads(json_string)
 
     
 #create the structure that will hold the completed requirements
@@ -599,9 +639,10 @@ scout_completion = findCompletion(scout_reqs)
 for rank in ranks:
     dbg("working on " + rank + " rank")
     reportname = rank + " " + DEN_OUTPUT_PDF
+    full_reportname = os.path.join(OUTPUT_FOLDER, reportname)
     
     #create the den report for the rank
-    (denDoc, denElements) = makeDenPDF(reportname)
+    (denDoc, denElements) = makeDenPDF(full_reportname)
     makeTitlePage(denDoc, denElements, styles, rank + " Den Overview", True)
     
     #Make the overview for each den
@@ -612,18 +653,21 @@ for rank in ranks:
 
     
     #create a folder for the den if it doesn't exist
-    if not os.path.exists(rank):
-        os.mkdir(rank)
+    den_folder = os.path.join(OUTPUT_FOLDER, rank)
+    if not os.path.exists(den_folder):
+        os.makedirs(den_folder)
     
     #output individual scout report cards
     for scout in scoutsByRank[rank]:
-        addScoutReportPage(scout, denElements, styles, rank)
+        
+        # Save scout report cards into the designated rank folder inside the output directory
+        addScoutReportPage(scout, denElements, styles, rank, den_folder)
         
     #create the den report
     denDoc.build(denElements)
     
     #copy the den report file to the folder for the den
-    shutil.copy(reportname, os.path.join(rank, reportname))
+    shutil.copy(full_reportname, os.path.join(den_folder, reportname))
 
 #print the finished pack PDF
 
