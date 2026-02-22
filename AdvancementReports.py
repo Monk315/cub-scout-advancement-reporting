@@ -244,6 +244,19 @@ def create_header_table(center_elements, rank, col_widths=[1.25*inch, 4.5*inch, 
     ]))
     return title_table
 
+def get_progress_color(pct):
+    if pct <= 50:
+        f = pct / 50.0
+        r = 239 + (245 - 239) * f
+        g = 68 + (158 - 68) * f
+        b = 68 + (11 - 68) * f
+    else:
+        f = (pct - 50.0) / 50.0
+        r = 245 + (16 - 245) * f
+        g = 158 + (185 - 158) * f
+        b = 11 + (129 - 11) * f
+    return colors.Color(r/255.0, g/255.0, b/255.0)
+
 def makeDenOverview(denElements, styles, packElements, rank):
     #title and subtitles
     titlepara = Paragraph(rank + " Den Snapshot", styles["Title"])
@@ -284,27 +297,30 @@ def makeDenOverview(denElements, styles, packElements, rank):
             fontSize=15
         ))
 
-        # --- Remaining portion (yellow, full width) ---
+        # --- Remaining portion (grey track, full width) ---
         line.add(Rect(
             NAME_WIDTH,
             0,
             BAR_WIDTH,
             BAR_HEIGHT,
-            fillColor=colors.yellow,
-            strokeColor=colors.black
-        ))
-
-        # --- Completed portion (blue, partial width) ---
-        completed_width = BAR_WIDTH * (pct / 100)
-
-        line.add(Rect(
-            NAME_WIDTH,
-            0,
-            completed_width,
-            BAR_HEIGHT,
-            fillColor=colors.darkblue,
+            rx=BAR_HEIGHT/2, ry=BAR_HEIGHT/2,
+            fillColor=colors.HexColor('#E2E8F0'),
             strokeColor=None
         ))
+
+        # --- Completed portion (dynamic fill, partial width) ---
+        completed_width = BAR_WIDTH * (pct / 100)
+        
+        if completed_width > 0:
+            line.add(Rect(
+                NAME_WIDTH,
+                0,
+                completed_width,
+                BAR_HEIGHT,
+                rx=BAR_HEIGHT/2, ry=BAR_HEIGHT/2,
+                fillColor=get_progress_color(pct),
+                strokeColor=None
+            ))
 
         # Percentage label
         line.add(String(
@@ -385,15 +401,21 @@ def buildRequirementSnapshot(denElements, styles, rank):
     
     # Create Table
     table = Table(table_data, colWidths=[1.75*inch, .5*inch, 4.5*inch, 1*inch])
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.grey),
+    table_style = [
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#334155")),
         ("TEXTCOLOR", (0,0), (-1,0), colors.whitesmoke),
         ("ALIGN", (0,0), (-1,-1), "LEFT"),
         ("FONTNAME", (0,0), (-1,0), "Candarab"),
         ("FONTSIZE", (0,0), (-1,0), 12),
-        ("BOTTOMPADDING", (0,0), (-1,0), 8),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.black),
-    ]))
+        ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 8),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
+    ]
+    for i in range(1, len(table_data)):
+        bg_color = colors.HexColor("#F8FAFC") if i % 2 == 0 else colors.white
+        table_style.append(("BACKGROUND", (0,i), (-1,i), bg_color))
+        
+    table.setStyle(TableStyle(table_style))
     
     denElements.append(table)
     
@@ -442,12 +464,13 @@ def addScoutReportPage(scout, denElements, styles, rank, output_dir):
         bar_height = 0.4*inch
         drawing = Drawing(bar_width, bar_height)
         
-        # Background bar (grey)
-        drawing.add(Rect(0, 0, bar_width, bar_height, fillColor=colors.lightgrey, strokeColor=colors.black))
+        # Background bar (grey track)
+        drawing.add(Rect(0, 0, bar_width, bar_height, rx=bar_height/2, ry=bar_height/2, fillColor=colors.HexColor('#E2E8F0'), strokeColor=None))
         
-        # Completed portion (green)
+        # Completed portion (dynamic fill)
         completed_width = bar_width * (pct / 100)
-        drawing.add(Rect(0, 0, completed_width, bar_height, fillColor=colors.green, strokeColor=None))
+        if completed_width > 0:
+            drawing.add(Rect(0, 0, completed_width, bar_height, rx=bar_height/2, ry=bar_height/2, fillColor=get_progress_color(pct), strokeColor=None))
         
         # Percentage text
         drawing.add(String(bar_width/2, bar_height/2 - 4, f"{pct:.1f}% Complete", 
