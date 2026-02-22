@@ -15,6 +15,16 @@ def dbg(msg):
     if(debugging):
         print("DEBUG: " + str(msg)+"\n")
 
+def make_footer(text):
+    def footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Candara", 9)
+        canvas.setFillColor(colors.HexColor('#64748B'))
+        page_width = doc.pagesize[0]
+        canvas.drawCentredString(page_width / 2.0, 0.4 * inch, f"{text}  |  Page {doc.page}")
+        canvas.restoreState()
+    return footer
+
 
 def makePackPDF(fname):
     #create the pack report
@@ -509,7 +519,8 @@ def addScoutReportPage(scout, denElements, styles, rank, output_dir):
     denElements.append(PageBreak())
     
     #print the individual doc
-    scoutdoc.build(scoutElements)
+    footer_func = make_footer(f"Pack {PACK_NUM} - {rank} Den - {scout}")
+    scoutdoc.build(scoutElements, onFirstPage=footer_func, onLaterPages=footer_func)
         
 
 import chardet
@@ -639,11 +650,12 @@ for rank in ranks:
         addScoutReportPage(scout, denElements, styles, rank, den_folder)
         
     #create the den report
-    denDoc.build(denElements)
+    footer_func = make_footer(f"Pack {PACK_NUM} - {rank} Den Report")
+    denDoc.build(denElements, onFirstPage=footer_func, onLaterPages=footer_func)
     
     #copy the den report file to the folder for the den
     shutil.copy(full_reportname, os.path.join(den_folder, reportname))
 
 #print the finished pack PDF
-
-packDoc.build(packElements)
+footer_func = make_footer(f"Pack {PACK_NUM} Advancement Report")
+packDoc.build(packElements, onFirstPage=footer_func, onLaterPages=footer_func)
