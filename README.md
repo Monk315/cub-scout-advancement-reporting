@@ -15,7 +15,7 @@ This script should be run in a folder and creates several different documents wh
 1. Copy `config.example.json` to a new file named `config.json`
 2. Update the `PACK_NUM` with your pack's number
 3. Update `PACK_LOGO` to point to your pack's logo file (e.g., `logos/logo.png`), if you have one
-4. Update `CSV_FILE` to point to the CSV export you generated from Internet Advancement
+4. Update `CSV_SOURCE` to point to the CSV export you generated from Internet Advancement. This can be a path to a single `.csv` file, or a folder containing multiple `.csv` files (e.g., one per den). If a folder is provided, all CSV files will be loaded and merged into one roster (duplicates are overridden by the last file processed).
 5. Optionally update `OUTPUT_FOLDER` if you'd like your PDF reports generated outside of the default `Output` directory
 
 **In order to run the script,**

@@ -1,6 +1,6 @@
 {
     "PACK_NUM": "1234",
-    "CSV_FILE": "C:\\fake\\path\\to\\reportbuilder.csv",
+    "CSV_SOURCE": "C:\\path\\to\\report.csv  OR  C:\\path\\to\\reports_folder",
     "OUTPUT_FOLDER": "C:\\fake\\path\\to\\output",
     "PACK_LOGO": "logos\\logo.png"
 }

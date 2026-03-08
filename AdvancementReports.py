@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import datetime
-import json, re, os
+import json, re, os, glob
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Table, TableStyle
 from reportlab.graphics.shapes import Drawing, Rect, String
@@ -525,26 +525,165 @@ def addScoutReportPage(scout, denElements, styles, rank, output_dir):
 
 import chardet
 
+def load_csv_sources(csv_source, ranks):
+    """Load scout data from a single CSV file or all CSV files in a folder.
+    
+    If csv_source is a file, it is sanitized and read directly.
+    If csv_source is a folder, all .csv files in the folder are loaded,
+    sanitized, and merged into one combined roster. Duplicate scouts
+    (by name) are overridden by the last file processed.
+    
+    Returns: (df, scout_names, scout_ranks, scout_ranks_completed, scoutsByRank)
+    """
+    
+    # Determine which CSV files to process
+    if os.path.isfile(csv_source):
+        csv_files = [csv_source]
+    elif os.path.isdir(csv_source):
+        csv_files = sorted(glob.glob(os.path.join(csv_source, "*.csv")))
+        if not csv_files:
+            print(f"Error: No .csv files found in folder: {csv_source}")
+            exit(1)
+        print(f"Found {len(csv_files)} CSV file(s) in {csv_source}")
+    else:
+        print(f"Error: CSV_SOURCE path not found: {csv_source}")
+        print("Please check your config.json and ensure the CSV_SOURCE path is correct.")
+        exit(1)
+    
+    # Process each CSV file and merge results
+    all_scout_data = {}  # keyed by scout name -> {name, rank, completed_rank, col_data}
+    all_data_rows = []    # list of DataFrames (data rows only, row 3+)
+    scout_order = []      # ordered list of scout names (preserves order, last file wins)
+    
+    for csv_file in csv_files:
+        print(f"Processing: {csv_file}")
+        
+        # Sanitize the input file
+        try:
+            sanitizeinput(csv_file)
+        except FileNotFoundError:
+            print(f"Warning: CSV file not found at {csv_file}, skipping.")
+            continue
+        
+        # Read the CSV
+        try:
+            file_df = pd.read_csv(csv_file, header=None)
+        except Exception as e:
+            print(f"Warning: Could not read CSV file {csv_file}: {e}, skipping.")
+            continue
+        
+        file_scout_names = file_df.iloc[0].tolist()
+        file_scout_ranks_completed = file_df.iloc[1].tolist()
+        file_scout_ranks = file_df.iloc[2].tolist()
+        file_data_rows = file_df.iloc[3:]  # requirement data rows
+        
+        # Register each scout from this file (override if duplicate)
+        for i, name in enumerate(file_scout_names):
+            if pd.isna(name) or str(name).strip() == '':
+                continue
+            name = str(name).strip()
+            
+            # Remove from old position in order list if already present
+            if name in all_scout_data:
+                if name in scout_order:
+                    scout_order.remove(name)
+            
+            all_scout_data[name] = {
+                'rank': file_scout_ranks[i] if i < len(file_scout_ranks) else '',
+                'completed_rank': file_scout_ranks_completed[i] if i < len(file_scout_ranks_completed) else '',
+                'source_file': csv_file,
+                'col_index': i  # column index within this file's DataFrame
+            }
+            scout_order.append(name)
+        
+        # Store data rows with a reference to the file's full DataFrame
+        all_data_rows.append((file_df, file_scout_names))
+    
+    if not all_scout_data:
+        print("Error: No valid scout data found in any CSV file.")
+        exit(1)
+    
+    # Build the unified roster
+    scout_names = scout_order
+    scout_ranks = [str(all_scout_data[n]['rank']) for n in scout_names]
+    scout_ranks_completed = [str(all_scout_data[n]['completed_rank']) for n in scout_names]
+    
+    # Build scoutsByRank
+    scoutsByRank = {rank: [] for rank in ranks}
+    for idx, (name, r) in enumerate(zip(scout_names, scout_ranks)):
+        if r in scoutsByRank:
+            scoutsByRank[r].append(name)
+        else:
+            completed_rank = scout_ranks_completed[idx]
+            if completed_rank in scoutsByRank:
+                scoutsByRank[completed_rank].append(name)
+    
+    # Build a unified DataFrame with all scouts as columns
+    # For single file, just use the original df
+    if len(all_data_rows) == 1:
+        df = all_data_rows[0][0]
+        # Update scout_names to include the first column (row labels)
+        scout_names = df.iloc[0].tolist()
+    else:
+        # For multiple files, we need to merge data rows
+        # Build a combined DataFrame where each column is a scout
+        # First, collect all data rows from all files
+        combined_rows = []
+        for file_df, file_scout_names in all_data_rows:
+            for _, row in file_df.iloc[3:].iterrows():
+                # Build a new row with scout_order as columns
+                new_row = {}
+                new_row[0] = row.iloc[0]  # requirement label (first column)
+                for scout_name in scout_order:
+                    if scout_name in file_scout_names:
+                        col_idx = file_scout_names.index(scout_name)
+                        new_row[scout_name] = row.iloc[col_idx] if col_idx < len(row) else ''
+                    else:
+                        new_row[scout_name] = ''
+                combined_rows.append(new_row)
+        
+        # Build header rows for the combined DataFrame
+        header_row_0 = {0: ''}
+        header_row_1 = {0: ''}
+        header_row_2 = {0: ''}
+        for name in scout_order:
+            header_row_0[name] = name
+            header_row_1[name] = all_scout_data[name]['completed_rank']
+            header_row_2[name] = all_scout_data[name]['rank']
+        
+        all_rows = [header_row_0, header_row_1, header_row_2] + combined_rows
+        df = pd.DataFrame(all_rows)
+        
+        # Reorder columns: first column (labels), then scout names
+        cols = [0] + scout_order
+        df = df.reindex(columns=cols, fill_value='')
+        df.columns = range(len(df.columns))  # reset to integer column indices
+        
+        # Update scout_names to match the DataFrame columns (including col 0)
+        scout_names = df.iloc[0].tolist()
+    
+    return (df, scout_names, scout_ranks, scout_ranks_completed, scoutsByRank)
+
 # Load configuration
 try:
     with open('config.json', 'r') as f:
         config = json.load(f)
     PACK_NUM = config.get("PACK_NUM", "1234")
-    CSV_FILE = config.get("CSV_FILE", "")
+    CSV_SOURCE = config.get("CSV_SOURCE", config.get("CSV_FILE", ""))  # backward compatible
     OUTPUT_FOLDER = config.get("OUTPUT_FOLDER", "Output")
     PACK_LOGO = config.get("PACK_LOGO", "logos" + os.sep + "logo.png")
 except FileNotFoundError:
     print("Warning: config.json not found. Creating a default config.json file. Please update it with your settings.")
     default_config = {
         "PACK_NUM": "1234",
-        "CSV_FILE": "C:\\path\\to\\your\\report.csv",
+        "CSV_SOURCE": "C:\\path\\to\\your\\report.csv",
         "OUTPUT_FOLDER": "Output",
         "PACK_LOGO": "logos" + os.sep + "logo.png"
     }
     with open('config.json', 'w') as f:
         json.dump(default_config, f, indent=4)
     PACK_NUM = default_config["PACK_NUM"]
-    CSV_FILE = default_config["CSV_FILE"]
+    CSV_SOURCE = default_config["CSV_SOURCE"]
     OUTPUT_FOLDER = default_config["OUTPUT_FOLDER"]
     PACK_LOGO = default_config["PACK_LOGO"]
 
@@ -560,44 +699,12 @@ PACK_OUTPUT_PDF = os.path.join(OUTPUT_FOLDER, "Pack " + PACK_NUM + " Advancement
 DEN_OUTPUT_PDF = " Den Advancement Report.pdf"
 JSON_FILE = "requirements.json"
 
-
-#Sanitize the input file because internet advancement adds weird stuff
-try:
-    sanitizeinput(CSV_FILE)
-except FileNotFoundError:
-    print(f"Error: CSV file not found at {CSV_FILE}")
-    print("Please check your config.json file and ensure the CSV_FILE path is correct.")
-    exit(1)
-
 #create the pack overview PDF
 (packDoc, packElements, styles) = makePackPDF(PACK_OUTPUT_PDF)
 makeTitlePage(packDoc, packElements, styles, "Pack Overview")
 
-
-
-#build a roster of all the scouts sorted by rank
-try:
-    df = pd.read_csv(CSV_FILE, header=None) #read in the CSV file
-except FileNotFoundError:
-    print(f"Error: Could not read CSV file at {CSV_FILE}")
-    exit(1)
-scout_names = df.iloc[0].tolist()
-scout_ranks = df.iloc[2].tolist()
-scout_ranks_completed = df.iloc[1].tolist()
-
-scoutsByRank = {rank: [] for rank in ranks}
-
-for idx, (name, r) in enumerate(zip(scout_names, scout_ranks)):
-    if r in scoutsByRank:
-        scoutsByRank[r].append(name)
-    else:
-        completed_rank = scout_ranks_completed[idx]
-        if completed_rank in scoutsByRank:
-            scoutsByRank[completed_rank].append(name) 
-
-
-
-import chardet
+#build a roster of all the scouts from CSV_SOURCE (file or folder)
+(df, scout_names, scout_ranks, scout_ranks_completed, scoutsByRank) = load_csv_sources(CSV_SOURCE, ranks)
 
 #build a structure of all the rank requirements
 with open(JSON_FILE, 'rb') as f:
